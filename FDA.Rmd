@@ -1,0 +1,42 @@
+---
+title: "fda cleanup"
+author: "Jonathan Chang"
+date: "October 30, 2015"
+output: html_document
+---
+
+```{r prelude}
+library(dplyr)
+library(tidyr)
+library(readr)
+library(stringr)
+library(lubridate)
+```
+
+get fda products
+
+```{r}
+application <- read_tsv("drugsatfda/application.txt")
+nme <- application %>% filter(str_trim(Chemical_Type) == 1)
+
+products <- read_tsv("drugsatfda/Product.txt")
+
+nme_names <- nme %>% left_join(products) %>% group_by(ApplNo) %>% distinct(activeingred) %>% ungroup %>% transmute(orig_ApplNo = ApplNo, activeingred)
+
+status <- left_join(nme_names, products) %>% group_by(activeingred) %>% summarise(ApplNo = min(orig_ApplNo), active = any(ProductMktStatus %in% 1:2, na.rm = T), is_discont = all(ProductMktStatus == 3, na.rm = T))
+
+status %>% summarise(sum(active), sum(is_discont))
+
+reg_actions <- read_tsv("drugsatfda/RegActionDate.txt", col_types = list(
+  col_integer(), col_character(), col_integer(), col_integer(), col_datetime(), col_character()
+))
+
+approval_dates <- reg_actions %>% group_by(ApplNo) %>% filter(DocType == "N") %>% summarise(approval_date = first(ActionDate))
+last_action <- reg_actions %>% group_by(ApplNo) %>% summarise(last_action = last(ActionDate))
+
+all_stats <- left_join(status, approval_dates) %>% left_join(last_action)
+
+all_stats %>% filter(is.na(approval_date)) %>% summarise(sum(active), sum(is_discont))
+```
+
+
